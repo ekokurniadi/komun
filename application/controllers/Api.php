@@ -191,7 +191,8 @@ class Api extends MY_Controller
 		}
 	}
 
-	public function buatKomunitas(){
+	public function buatKomunitas()
+	{
 		$nama = $this->input->post('nama');
 		$tentang = $this->input->post('tentang');
 		$kegiatan = $this->input->post('kegiatan');
@@ -213,16 +214,56 @@ class Api extends MY_Controller
 			"admin" => $admin,
 			"contact" => $contact,
 		);
-		$insert = $this->db->insert('komunitas',$data);
-		if($insert){
+		$insert = $this->db->insert('komunitas', $data);
+		if ($insert) {
 			echo json_encode(array(
-				"status"=>"200",
-				"message"=>"Berhasil membuat komunitas."
+				"status" => "200",
+				"message" => "Berhasil membuat komunitas."
 			));
-		}else{
+		} else {
 			echo json_encode(array(
-				"status"=>403,
-				"message"=>"Terjadi kesalahan mohon coba kembali."
+				"status" => 403,
+				"message" => "Terjadi kesalahan mohon coba kembali."
+			));
+		}
+	}
+	public function editKomunitas()
+	{
+		$id = $this->input->post('id');
+		$nama = $this->input->post('nama');
+		$tentang = $this->input->post('tentang');
+		$kegiatan = $this->input->post('kegiatan');
+		$info = $this->input->post('info');
+		$contact = $this->input->post('contact');
+		$lokasi = $this->input->post('lokasi');
+
+		$data = array(
+			"nama_komunitas" => $nama,
+			"tentang" => $tentang,
+			"kegiatan" => $kegiatan,
+			"info" => $info,
+			"lokasi" => $lokasi,
+			"contact" => $contact,
+		);
+		$cek =  $this->db->get_where('komunitas', array('id' => $id));
+		if ($cek->num_rows() > 0) {
+			$this->db->where('id', $id);
+			$update = $this->db->update('komunitas', $data);
+			if ($update) {
+				echo json_encode(array(
+					"status" => "200",
+					"message" => "Berhasil memperbarui data komunitas."
+				));
+			} else {
+				echo json_encode(array(
+					"status" => 403,
+					"message" => "Terjadi kesalahan mohon coba kembali."
+				));
+			}
+		} else {
+			echo json_encode(array(
+				"status" => 403,
+				"message" => "Terjadi kesalahan mohon coba kembali."
 			));
 		}
 	}
@@ -231,13 +272,13 @@ class Api extends MY_Controller
 	{
 		$filter = $this->input->post('filter');
 		$idUser = $this->input->post('idUser');
-		$where ="WHERE 1=1 AND idTo ='$idUser' or idFrom ='$idUser' ";
-		if($filter == ""){
-			$where .="";
-		}else{
-			$where .=" AND (nameTo like '%$filter%') ";
+		$where = "WHERE 1=1 AND idTo ='$idUser' or idFrom ='$idUser' ";
+		if ($filter == "") {
+			$where .= "";
+		} else {
+			$where .= " AND (nameTo like '%$filter%') ";
 		}
-		$where .=" ORDER BY created_at ASC";
+		$where .= " ORDER BY created_at ASC";
 		$data = $this->db->query("SELECT * from message_user  $where");
 		if ($data->num_rows() > 0) {
 			$response = array();
@@ -290,6 +331,7 @@ class Api extends MY_Controller
 	public function getAlbum()
 	{
 		$id = $this->input->post('id');
+		$this->db->order_by('id', 'DESC');
 		$data = $this->db->get_where('komunitas_album', array('id_komunitas' => $id));
 
 		if ($data->num_rows() > 0) {
@@ -414,13 +456,39 @@ class Api extends MY_Controller
 			$response = array(
 				"nama_komunitas" => $data->row()->nama_komunitas,
 				"info" => $data->row()->info,
-				"pengikut" => (String)$this->db->get_where('komunitas_followers', array('id_komunitas' => $idKomunitas))->num_rows(),
-				"post" => (String)$this->db->get_where('komunitas_album', array('id_komunitas' => $idKomunitas))->num_rows(),
+				"pengikut" => (string)$this->db->get_where('komunitas_followers', array('id_komunitas' => $idKomunitas))->num_rows(),
+				"post" => (string)$this->db->get_where('komunitas_album', array('id_komunitas' => $idKomunitas))->num_rows(),
 				"lokasi" => $data->row()->lokasi,
 				"cover" => $data->row()->cover,
 				"tentang" => $data->row()->tentang,
 				"contact" => $data->row()->contact,
-				"admin"=>$data->row()->admin,
+				"admin" => $data->row()->admin,
+			);
+			echo json_encode(array(
+				"status" => 200,
+				"values" => $response
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "403",
+				"message" => "Data tidak ditemukan"
+			));
+		}
+	}
+	public function getByIdEdit()
+	{
+		$idKomunitas = $this->input->post('id');
+		$data = $this->db->get_where('komunitas', array('id' => $idKomunitas));
+		$response = array();
+		if ($data->num_rows() > 0) {
+			$response = array(
+				"nama_komunitas" => $data->row()->nama_komunitas,
+				"info" => $data->row()->info,
+				"kegiatan" => $data->row()->kegiatan,
+				"lokasi" => $data->row()->lokasi,
+				"tentang" => $data->row()->tentang,
+				"cover" => $data->row()->cover,
+				"contact" => $data->row()->contact,
 			);
 			echo json_encode(array(
 				"status" => 200,
@@ -434,7 +502,8 @@ class Api extends MY_Controller
 		}
 	}
 
-	public function uploadAlbum(){
+	public function uploadAlbum()
+	{
 		$id = $_POST['id'];
 		$image = $_POST['image'];
 		$name = $_POST['name'];
@@ -442,10 +511,28 @@ class Api extends MY_Controller
 		$realImage = base64_decode($image);
 		$files = file_put_contents("./image/" . $name, $realImage);
 		$data = array(
-			"id_komunitas"=>$id,
+			"id_komunitas" => $id,
 			"foto" => $name,
 		);
-		$this->db->insert('komunitas_album',$data);
+		$this->db->insert('komunitas_album', $data);
+		echo json_encode(array(
+			"status" => "1",
+			"pesan" => "Foto Profil berhasil di perbarui",
+		));
+	}
+
+	public function updateFotoProfileKomunitas()
+	{
+		$id = $_POST['id'];
+		$image = $_POST['image'];
+		$name = $_POST['name'];
+		$realImage = base64_decode($image);
+		$files = file_put_contents("./image/" . $name, $realImage);
+		$data = array(
+			"cover" => $name,
+		);
+		$this->db->where('id', $id);
+		$this->db->update('komunitas', $data);
 		echo json_encode(array(
 			"status" => "1",
 			"pesan" => "Foto Profil berhasil di perbarui",
@@ -506,5 +593,60 @@ class Api extends MY_Controller
 				"message" => "Gagal"
 			));
 		}
+	}
+
+	public function fetch_data()
+	{
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT  $starts, $length ";
+		$draw         = $this->input->post("draw");
+		$search       = $this->input->post('searching');
+		$orders       = isset($_POST['order']) ? $_POST['order'] : '';
+		$id           = $this->input->post('id');
+
+		$where = "WHERE 1=1 AND b.id_komunitas='$id'";
+		// $searchingColumn;
+		$result = array();
+		if (isset($search)) {
+			if ($search != '') {
+				$where .= " AND (a.nama LIKE '%$search%')";
+			}
+		}
+
+		if (isset($orders)) {
+			if ($orders != '') {
+				$order = $orders;
+				$order_column = [''];
+				$order_clm  = $order_column[$order[0]['column']];
+				$order_by   = $order[0]['dir'];
+				$where .= " ORDER BY $order_clm $order_by ";
+			} else {
+				$where .= " ORDER BY a.nama ASC ";
+			}
+		} else {
+			$where .= " ORDER BY a.nama ASC ";
+		}
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ' . $LIMIT;
+			}
+		}
+		$index = 1;
+		$fetch = $this->db->query("SELECT a.nama,a.id,a.picture from user a join komunitas_followers b on a.id = b.id_user $where");
+		foreach ($fetch->result() as $rows) {
+			$sub_array = array();
+			$sub_array[] = $index;
+			$sub_array[] = $rows->id;
+			$sub_array[] = $rows->nama;
+			$sub_array[] = $rows->picture;
+			$result[]      = $sub_array;
+			$index++;
+		}
+		$output = array(
+			"data"            =>     $result,
+
+		);
+		echo json_encode($output);
 	}
 }
