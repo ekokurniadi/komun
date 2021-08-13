@@ -5,6 +5,7 @@ class Api extends MY_Controller
 	{
 		parent::__construct();
 		// ini_set('display_errors', 0);
+		date_default_timezone_set('Asia/jakarta');
 	}
 
 	public function login()
@@ -270,15 +271,26 @@ class Api extends MY_Controller
 
 	public function getChatRoom()
 	{
-		$filter = $this->input->post('filter');
-		$idUser = $this->input->post('idUser');
+
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT $starts, $length ";
+		$search       = $this->input->post('searching');
+		$idUser     = $this->input->post('id');
+
 		$where = "WHERE 1=1 AND idTo ='$idUser' or idFrom ='$idUser' ";
-		if ($filter == "") {
+		if ($search == "") {
 			$where .= "";
 		} else {
-			$where .= " AND (nameTo like '%$filter%') ";
+			$where .= " AND (idTo like '%$search%') ";
 		}
-		$where .= " ORDER BY created_at ASC";
+
+		$where .= " ORDER BY created_at DESC";
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ';
+			}
+		}
 		$data = $this->db->query("SELECT * from message_user  $where");
 		if ($data->num_rows() > 0) {
 			$response = array();
@@ -297,11 +309,13 @@ class Api extends MY_Controller
 					"lastMessagePengirim" => $this->db->get_where('message', ['sender' => $rows->idFrom, 'id_chat' => $rows->id_room])->row()->message,
 					"lastTimeTujuan" => $this->db->get_where('message', ['recipient' => $rows->idTo, 'id_chat' => $rows->id_room])->row()->created_at == null ? "" : $this->db->get_where('message', ['recipient' => $rows->idTo, 'id_chat' => $rows->id_room])->row()->created_at,
 					"lastTimePengirim" => $this->db->get_where('message', ['sender' => $rows->idFrom, 'id_chat' => $rows->id_room])->row()->created_at == null ? "" : $this->db->get_where('message', ['sender' => $rows->idFrom, 'id_chat' => $rows->id_room])->row()->created_at,
+					"created" => formatTanggal(substr($rows->created_at, 0, 10)),
+					"time" => substr($rows->created_at, 11, 8),
 				));
 			}
 			echo json_encode(array(
 				"status" => "200",
-				"values" => $response,
+				"data" => $response,
 			));
 		} else {
 			echo json_encode(array(
@@ -312,20 +326,139 @@ class Api extends MY_Controller
 	}
 
 
-	public function getChatFromSender()
+	public function sendMessage()
 	{
-		$idUser = $this->input->post('idUser');
-
-		$data = $this->db->query("SELECT user.nama,user.id,user.picture,msh.idTo,msh.idFrom
-		 from user user join message_user msh on msh.idTo=user.id");
+		$sender = $this->input->post('sender');
+		$message = $this->input->post('message');
+		$recipient = $this->input->post('recipient');
+		$id_chat = $this->input->post('id_chat');
+		$date = date('Y-m-d H:i:s');
+		$data = array(
+			"id_chat" => $id_chat,
+			"message" => $message,
+			"sender" => $sender,
+			"recipient" => $recipient,
+			"created_at" => $date,
+			"msg_type" => 0,
+			"status" => 0,
+			"status_recipient" => 1
+		);
+		$insert = $this->db->insert('message', $data);
+		$this->db->query("UPDATE message_user set created_at ='$date' where id_room='$id_chat'");
+		if ($insert) {
+			echo json_encode(array(
+				"status" => "200",
+				"message" => "Berhasil",
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "500",
+				"message" => "Gagal",
+			));
+		}
 	}
 
-	public function getChatFromRecipient()
+	public function getMessage()
 	{
-		$idUser = $this->input->post('idUser');
 
-		$data = $this->db->query("SELECT user.nama,user.id,user.picture,msh.idTo,msh.idFrom
-		 from user user join message_user msh on msh.idFrom=user.id");
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT $starts, $length ";
+		$search       = $this->input->post('searching');
+		$idUser       = $this->input->post('id');
+
+		$where = "WHERE 1=1 AND id_chat='$idUser' ";
+		if ($search == "") {
+			$where .= "";
+		} else {
+			$where .= " AND (idTo like '%$search%') ";
+		}
+
+		$where .= " ORDER BY id ASC";
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ' . $LIMIT;
+			}
+		}
+		$data = $this->db->query("SELECT * from message  $where");
+		if ($data->num_rows() > 0) {
+			$response = array();
+			foreach ($data->result() as $rows) {
+				array_push($response, array(
+					"message" => $rows->message,
+					"sender" => $rows->sender,
+					"created" => formatTanggal(substr($rows->created_at, 0, 10)),
+					"time" => substr($rows->created_at, 11, 8),
+				));
+			}
+			echo json_encode(array(
+				"status" => "200",
+				"data" => $response,
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "404",
+				"message" => "Kotak pesan masih kosong",
+			));
+		}
+	}
+
+	function acak($panjang)
+	{
+		$karakter = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456789';
+		$string = '';
+		for ($i = 0; $i < $panjang; $i++) {
+			$pos = rand(0, strlen($karakter) - 1);
+			$string .= $karakter{
+				$pos};
+		}
+		return $string;
+	}
+
+	public function createMessage()
+	{
+		$sender = $this->input->post('sender');
+		$senderName = $this->input->post('senderName');
+		$recipient = $this->input->post('recipient');
+		$recipientName = $this->input->post('recipientName');
+		$kode = $this->acak(10);
+		$response = array();
+		$cek = $this->db->query("SELECT * FROM message_user where idFrom='$sender' and idTo='$recipient'");
+		if ($cek->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => "200",
+				"idRoom" => $cek->row()->id_room,
+				"recepientId" => $cek->row()->idTo,
+				"recepient" => $cek->row()->nameTo
+			));
+		} else {
+			$insert_message_user = array(
+				"id_room" => $kode,
+				"idTo" => $recipient,
+				"idFrom" => $sender,
+				"nameTo" => $recipientName,
+				"nameFrom" => $senderName,
+				"created_at" => date('Y-m-d H:i:s')
+			);
+			$message = array(
+				"id_chat" => $kode,
+				"message" => "Hai,",
+				"sender" => $sender,
+				"recipient" => $recipient,
+				"created_at" => date('Y-m-d H:i:s'),
+				"msg_type" => 0,
+				"status" => 0,
+				"status_recipient" => 0
+			);
+			$prosesInsert = $this->db->insert('message_user', $insert_message_user);
+			$insertMessage = $this->db->insert('message', $message);
+			echo json_encode(array(
+				"status" => "200",
+				"idRoom" => $kode,
+				"recepientId" => $recipient,
+				"recepient" => $recipientName
+			));
+		}
 	}
 
 	public function getAlbum()
@@ -634,6 +767,62 @@ class Api extends MY_Controller
 		}
 		$index = 1;
 		$fetch = $this->db->query("SELECT a.nama,a.id,a.picture from user a join komunitas_followers b on a.id = b.id_user $where");
+		foreach ($fetch->result() as $rows) {
+			$sub_array = array();
+			$sub_array[] = $index;
+			$sub_array[] = $rows->id;
+			$sub_array[] = $rows->nama;
+			$sub_array[] = $rows->picture;
+			$result[]      = $sub_array;
+			$index++;
+		}
+		$output = array(
+			"data"            =>     $result,
+
+		);
+		echo json_encode($output);
+	}
+
+	public function fetch_kontak()
+	{
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT  $starts, $length ";
+		$draw         = $this->input->post("draw");
+		$search       = $this->input->post('searching');
+		$orders       = isset($_POST['order']) ? $_POST['order'] : '';
+		$id           = $this->input->post('id');
+
+
+		$where = "WHERE 1=1 and a.id !='$id'";
+		// $searchingColumn;
+		$result = array();
+		if (isset($search)) {
+			if ($search != '') {
+				$where .= " AND (a.nama LIKE '%$search%')";
+			}
+		}
+
+		if (isset($orders)) {
+			if ($orders != '') {
+				$order = $orders;
+				$order_column = [''];
+				$order_clm  = $order_column[$order[0]['column']];
+				$order_by   = $order[0]['dir'];
+				$where .= " ORDER BY $order_clm $order_by ";
+			} else {
+				$where .= " ORDER BY a.nama ASC ";
+			}
+		} else {
+			$where .= " ORDER BY a.nama ASC ";
+		}
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ' . $LIMIT;
+			}
+		}
+		$index = 1;
+		$fetch = $this->db->query("SELECT a.nama,a.id,a.picture from user a $where");
 		foreach ($fetch->result() as $rows) {
 			$sub_array = array();
 			$sub_array[] = $index;
