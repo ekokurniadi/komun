@@ -6,6 +6,7 @@ class Api extends MY_Controller
 		parent::__construct();
 		// ini_set('display_errors', 0);
 		date_default_timezone_set('Asia/jakarta');
+		$this->load->model('SendNotif_model');
 	}
 
 	public function login()
@@ -558,6 +559,66 @@ class Api extends MY_Controller
 		}
 	}
 
+	public function updateFotoProfile()
+	{
+		$id = $_POST['id'];
+		$image = $_POST['image'];
+		$name = $_POST['name'];
+		$folderPath = "./image/" . $name;
+		$realImage = base64_decode($image);
+		$files = file_put_contents("./image/" . $name, $realImage);
+		$data = array(
+			"picture" => $name,
+		);
+		$this->db->where('id', $id);
+		$this->db->update('user', $data);
+		echo json_encode(array(
+			"status" => "1",
+			"pesan" => "Foto Profil berhasil di perbarui",
+		));
+	}
+
+	public function updateState()
+	{
+		$id = $this->input->post('id');
+		$status = $this->input->post('status');
+
+		$this->db->where('id', $id);
+		$upd = $this->db->update('user', array("status" => $status));
+		if ($upd) {
+			echo json_encode(array(
+				"status" => "200",
+				"message" => "Berhasil merubah data",
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "500",
+				"message" => "Terjadi kesalahan",
+			));
+		}
+	}
+
+	public function getCurrentUser()
+	{
+		$id = $this->input->post('id');
+		$data = $this->db->query("SELECT * from user where id='$id'");
+		$result = array();
+		if ($data->num_rows() > 0) {
+			$result = array(
+				"status" => 200,
+				"id" => $data->row()->id,
+				"nama" => $data->row()->nama,
+				"alamat" => $data->row()->alamat == "" ? "-" : $data->row()->alamat,
+				"level" => $data->row()->level,
+				"username" => $data->row()->username,
+				"password" => $data->row()->password,
+				"picture" => $data->row()->picture == "" ? "default.png" : $data->row()->picture,
+				"statususer" => $data->row()->status,
+			);
+			echo json_encode($result);
+		}
+	}
+
 	public function unfollow()
 	{
 		$idUser = $this->input->post('idUser');
@@ -783,6 +844,62 @@ class Api extends MY_Controller
 		echo json_encode($output);
 	}
 
+
+	public function fetch_komunitas()
+	{
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT  $starts, $length ";
+		$draw         = $this->input->post("draw");
+		$search       = $this->input->post('searching');
+		$orders       = isset($_POST['order']) ? $_POST['order'] : '';
+
+		$where = "WHERE 1=1 ";
+		// $searchingColumn;
+		$result = array();
+		if (isset($search)) {
+			if ($search != '') {
+				$where .= " AND (nama_komunitas LIKE '%$search%')";
+			}
+		}
+
+		if (isset($orders)) {
+			if ($orders != '') {
+				$order = $orders;
+				$order_column = [''];
+				$order_clm  = $order_column[$order[0]['column']];
+				$order_by   = $order[0]['dir'];
+				$where .= " ORDER BY $order_clm $order_by ";
+			} else {
+				$where .= " ORDER BY nama_komunitas ASC ";
+			}
+		} else {
+			$where .= " ORDER BY nama_komunitas ASC ";
+		}
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ';
+			}
+		}
+		$index = 1;
+		$fetch = $this->db->query("SELECT * from komunitas $where");
+		$response = array();
+		foreach ($fetch->result() as $rows) {
+			array_push($response, array(
+				"index" => $index,
+				"id" => $rows->id,
+				"nama_komunitas" => $rows->nama_komunitas,
+				"isChecked" => false,
+			));
+			$index++;
+		}
+		$output = array(
+			"data"            => $response,
+
+		);
+		echo json_encode($output);
+	}
+
 	public function fetch_kontak()
 	{
 		$starts       = $this->input->post("start");
@@ -837,5 +954,53 @@ class Api extends MY_Controller
 
 		);
 		echo json_encode($output);
+	}
+
+	public function broadcastMessage()
+	{
+		if ($this->input->post('arrayId') != "") {
+			header('Content-Type: application/json');
+			$id = str_replace(']', '', str_replace('[', '', str_replace('"', '', $this->input->post('arrayId'))));
+			$pesan = $this->input->post('pesan');
+			$array = explode(',', $id);
+			$response = array();
+			$title = "Broadcast Message";
+			$body = $pesan;
+			$screen = "list_trx";
+			if (is_array($id)) {
+				foreach ($array as $key => $value) {
+					$data = $this->db->query("select * from komunitas_followers where id_komunitas='$key'");
+					if ($data->num_rows() > 0) {
+						foreach ($data->result() as $rows) {
+							$token = $this->db->get_where('user', array('id' => $rows->id_user))->row()->token;
+							$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
+							$ins = array("user_id" => $rows->id_user, "pesan" => $pesan, "status" => 0, "created" => date('Y-m-d H:i:s'), "deleted" => 0);
+							$this->db->insert('notifikasi', $ins);
+						}
+					}
+					array_push($response, array(
+						"id" => $key,
+					));
+				}
+			} else {
+				$data = $this->db->query("select * from komunitas_followers where id_komunitas='$id'");
+				if ($data->num_rows() > 0) {
+					foreach ($data->result() as $rows) {
+						$token = $this->db->get_where('user', array('id' => $rows->id_user))->row()->token;
+						$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
+						$ins = array("user_id" => $rows->id_user, "pesan" => $pesan, "status" => 0, "created" => date('Y-m-d H:i:s'), "deleted" => 0);
+						$this->db->insert('notifikasi', $ins);
+					}
+				}
+				array_push($response, array(
+					"id" => $id,
+				));
+			}
+
+			echo json_encode(array(
+				"pesan" => $pesan,
+				"komunitas" => $id,
+			));
+		}
 	}
 }
