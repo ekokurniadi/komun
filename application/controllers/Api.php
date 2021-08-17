@@ -125,7 +125,7 @@ class Api extends MY_Controller
 
 
 		$data = array(
-			"id_user"=>$id,
+			"id_user" => $id,
 			"nama" => $nama,
 			"alamat" => $alamat,
 			"no_telp" => $notelp,
@@ -347,6 +347,7 @@ class Api extends MY_Controller
 					"lastTimePengirim" => $this->db->get_where('message', ['sender' => $rows->idFrom, 'id_chat' => $rows->id_room])->row()->created_at == null ? "" : $this->db->get_where('message', ['sender' => $rows->idFrom, 'id_chat' => $rows->id_room])->row()->created_at,
 					"created" => formatTanggal(substr($rows->created_at, 0, 10)),
 					"time" => substr($rows->created_at, 11, 8),
+					"telp" => $this->db->get_where('user', ['id' => $rows->idTo])->row()->username,
 				));
 			}
 			echo json_encode(array(
@@ -800,9 +801,31 @@ class Api extends MY_Controller
 		$this->db->insert('komunitas_album', $data);
 		echo json_encode(array(
 			"status" => "1",
-			"pesan" => "Foto Profil berhasil di perbarui",
+			"pesan" => "Foto berhasil di Unggah",
 		));
 	}
+
+	public function uploadAlbumUser()
+	{
+		$id = $_POST['id'];
+		$image = $_POST['image'];
+		$name = $_POST['name'];
+		$folderPath = "./image/" . $name;
+		$realImage = base64_decode($image);
+		$files = file_put_contents("./image/" . $name, $realImage);
+		$data = array(
+			"id_user" => $id,
+			"foto" => $name,
+			"created_at"=>date('Y-m-d H:i:s'),
+			"post"=>0
+		);
+		$this->db->insert('user_album', $data);
+		echo json_encode(array(
+			"status" => "1",
+			"pesan" => "Foto berhasil di Unggah",
+		));
+	}
+
 
 	public function updateFotoProfileKomunitas()
 	{
@@ -1028,13 +1051,14 @@ class Api extends MY_Controller
 			}
 		}
 		$index = 1;
-		$fetch = $this->db->query("SELECT a.nama,a.id,a.picture from user a $where");
+		$fetch = $this->db->query("SELECT a.nama,a.id,a.picture,a.username from user a $where");
 		foreach ($fetch->result() as $rows) {
 			$sub_array = array();
 			$sub_array[] = $index;
 			$sub_array[] = $rows->id;
 			$sub_array[] = $rows->nama;
 			$sub_array[] = $rows->picture;
+			$sub_array[] = $rows->username;
 			$result[]      = $sub_array;
 			$index++;
 		}
@@ -1094,6 +1118,68 @@ class Api extends MY_Controller
 				"komunitas" => $id,
 				"jumlah" => $count,
 				"response" => $response
+			));
+		}
+	}
+
+	public function getMembantu()
+	{
+		$user   = $this->input->post("idUser");
+		$data = $this->db->query("SELECT a.id,a.waktu,a.keterangan,a.lokasi,a.user_id,a.user_penolong,a.status from cari_bantuan a where a.user_penolong='$user' and not exists(SELECT b.user_penolong from cari_bantuan_his b where b.user_penolong='$user' and b.id_cari=a.id)");
+		if ($data->num_rows() > 0) {
+			$response = array();
+			foreach ($data->result() as $rows) {
+				array_push($response, array(
+					"id" => $rows->id,
+					"userPemohon" => $this->db->get_where('user', array('id' => $rows->user_id))->row()->nama,
+					"tanggal" => formatTanggal(substr($rows->waktu, 0, 10)),
+					"jam" => substr($rows->waktu, 11, 8),
+					"keterangan" => $rows->keterangan,
+					"alamat" => $rows->lokasi,
+					"status" => $rows->status,
+
+				));
+			}
+			echo json_encode(array(
+				"status" => 200,
+				"values" => $response
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"message" => "Data tidak ditemukan"
+			));
+		}
+	}
+
+	public function getBantuan()
+	{
+		$user   = $this->input->post("idUser");
+		$data = $this->db->query("SELECT a.id,a.waktu,a.keterangan,a.lokasi,a.user_id,a.user_penolong,a.status from cari_bantuan a where a.user_id='$user'");
+		if ($data->num_rows() > 0) {
+			$response = array();
+			foreach ($data->result() as $rows) {
+				array_push($response, array(
+					"id" => $rows->id,
+					"userPemohon" => $this->db->get_where('user', array('id' => $rows->user_id))->row()->nama,
+					"tanggal" => formatTanggal(substr($rows->waktu, 0, 10)),
+					"jam" => substr($rows->waktu, 11, 8),
+					"keterangan" => $rows->keterangan,
+					"alamat" => $rows->lokasi,
+					"status" => $rows->status,
+					"pembantu" => $this->db->get_where('user', array('id' => $rows->user_penolong))->row()->nama == "" ? "" : $this->db->get_where('user', array('id' => $rows->user_penolong))->row()->nama,
+					"sender" => $rows->user_id,
+					"recipient" => $rows->user_penolong,
+				));
+			}
+			echo json_encode(array(
+				"status" => 200,
+				"values" => $response
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"message" => "Data tidak ditemukan"
 			));
 		}
 	}
