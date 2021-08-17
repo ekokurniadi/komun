@@ -116,6 +116,41 @@ class Api extends MY_Controller
 			}
 		}
 	}
+	public function registerKeamanan()
+	{
+		$id = $this->input->post('id');
+		$nama = $this->input->post("nama");
+		$alamat = $this->input->post("alamat");
+		$notelp = $this->input->post("noTelp");
+
+
+		$data = array(
+			"id_user"=>$id,
+			"nama" => $nama,
+			"alamat" => $alamat,
+			"no_telp" => $notelp,
+		);
+		$cek = $this->db->get_where('keamanan', ["id_user" => $id]);
+		if ($cek->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => "error",
+				"message" => "Anda sudah terdaftar sebagai keamnan"
+			));
+		} else {
+			$insert = $this->db->insert('keamanan', $data);
+			if ($insert) {
+				echo json_encode(array(
+					"status" => "200",
+					"message" => "Registrasi sebagai keamanan berhasil"
+				));
+			} else {
+				echo json_encode(array(
+					"status" => "error",
+					"message" => "Gagal, silahkan coba kembali beberapa saat lagi."
+				));
+			}
+		}
+	}
 
 	public function getBeranda()
 	{
@@ -487,6 +522,31 @@ class Api extends MY_Controller
 			));
 		}
 	}
+	public function getAlbumUser()
+	{
+		$id = $this->input->post('id');
+		$this->db->order_by('id', 'DESC');
+		$data = $this->db->get_where('user_album', array('id_user' => $id));
+
+		if ($data->num_rows() > 0) {
+			$response = array();
+			foreach ($data->result() as $rows) {
+				array_push($response, array(
+					"id" => $rows->id,
+					"foto" => $rows->foto,
+				));
+			}
+			echo json_encode(array(
+				"status" => "200",
+				"values" => $response
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"message" => "Data tidak ditemukan"
+			));
+		}
+	}
 
 	public function getBerandaFollow()
 	{
@@ -618,6 +678,35 @@ class Api extends MY_Controller
 			echo json_encode($result);
 		}
 	}
+
+	public function updateProfileUser()
+	{
+		$id = $this->input->post("id");
+		$name = $this->input->post("nama");
+		$alamat = $this->input->post("alamat");
+		$password = $this->input->post("password");
+		$result = array(
+			"nama" => $name,
+			"alamat" => $alamat,
+			"password" => $password
+		);
+
+		// echo json_encode($result);
+		$this->db->where('id', $id);
+		$update = $this->db->update('user', $result);
+		if ($update) {
+			echo json_encode(array(
+				"status" => 200,
+				"message" => "Berhasil melakukan perubahan data."
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "error",
+				"message" => "Gagal melakukan perubahan data."
+			));
+		}
+	}
+
 
 	public function unfollow()
 	{
@@ -751,7 +840,7 @@ class Api extends MY_Controller
 			} else {
 				foreach ($data->result() as $rows) {
 					$sub_array = array();
-					$sub_array[] = "Hallo " . $rows->nama . ", " . $rows->pesan;
+					$sub_array[] = $rows->pesan;
 					$sub_array[] = $rows->status;
 					$sub_array[] = formatTanggal(substr($rows->created, 0, 10));
 					$sub_array[] = substr($rows->created, 11, 19);
@@ -967,7 +1056,8 @@ class Api extends MY_Controller
 			$title = "Broadcast Message";
 			$body = $pesan;
 			$screen = "list_trx";
-			if (is_array($id)) {
+			$count = count($array);
+			if ($count > 1) {
 				foreach ($array as $key => $value) {
 					$data = $this->db->query("select * from komunitas_followers where id_komunitas='$key'");
 					if ($data->num_rows() > 0) {
@@ -982,7 +1072,7 @@ class Api extends MY_Controller
 						"id" => $key,
 					));
 				}
-			} else {
+			} else if ($count == 1) {
 				$data = $this->db->query("select * from komunitas_followers where id_komunitas='$id'");
 				if ($data->num_rows() > 0) {
 					foreach ($data->result() as $rows) {
@@ -993,13 +1083,17 @@ class Api extends MY_Controller
 					}
 				}
 				array_push($response, array(
-					"id" => $id,
+					"idnya" => $id,
+					"log" => $this->db->last_query()
 				));
 			}
 
 			echo json_encode(array(
+				"status" => "200",
 				"pesan" => $pesan,
 				"komunitas" => $id,
+				"jumlah" => $count,
+				"response" => $response
 			));
 		}
 	}
