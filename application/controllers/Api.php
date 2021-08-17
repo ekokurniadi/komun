@@ -370,6 +370,9 @@ class Api extends MY_Controller
 		$recipient = $this->input->post('recipient');
 		$id_chat = $this->input->post('id_chat');
 		$date = date('Y-m-d H:i:s');
+		$title = "Broadcast Message";
+		$body = $message;
+		$screen = "list_trx";
 		$data = array(
 			"id_chat" => $id_chat,
 			"message" => $message,
@@ -381,6 +384,8 @@ class Api extends MY_Controller
 			"status_recipient" => 1
 		);
 		$insert = $this->db->insert('message', $data);
+		$token = $this->db->get_where('user', array('id' => $recipient))->row()->token;
+		$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
 		$this->db->query("UPDATE message_user set created_at ='$date' where id_room='$id_chat'");
 		if ($insert) {
 			echo json_encode(array(
@@ -816,8 +821,8 @@ class Api extends MY_Controller
 		$data = array(
 			"id_user" => $id,
 			"foto" => $name,
-			"created_at"=>date('Y-m-d H:i:s'),
-			"post"=>0
+			"created_at" => date('Y-m-d H:i:s'),
+			"post" => 0
 		);
 		$this->db->insert('user_album', $data);
 		echo json_encode(array(
