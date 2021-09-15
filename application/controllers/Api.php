@@ -9,6 +9,37 @@ class Api extends MY_Controller
 		$this->load->model('SendNotif_model');
 	}
 
+
+	public function sendLocation()
+	{
+		if ($_POST) {
+			$lat  = $this->input->post("latitude");
+			$long = $this->input->post("longitude");
+			$afc = $this->input->post("afc");
+			$id   = $this->input->post("id");
+
+			$data = array(
+				"latitude" => $lat,
+				"longitude" => $long,
+				"afc" => $afc,
+			);
+			if ($lat != "" and $long != "") {
+				$this->db->where('id', $id);
+				$this->db->update('petugas', $data);
+			}
+			echo json_encode(array(
+				"status" => 200,
+				"message" => "Success",
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "error",
+				"message" => "Gagal Mendapatkan lokasi",
+			));
+		}
+	}
+
+
 	public function login()
 	{
 		if ($_POST) {
@@ -366,11 +397,12 @@ class Api extends MY_Controller
 	public function sendMessage()
 	{
 		$sender = $this->input->post('sender');
+		$name = $this->db->get_where('user', array('id' => $sender))->row()->nama;
 		$message = $this->input->post('message');
 		$recipient = $this->input->post('recipient');
 		$id_chat = $this->input->post('id_chat');
 		$date = date('Y-m-d H:i:s');
-		$title = "Broadcast Message";
+		$title = "Message from " . $name;
 		$body = $message;
 		$screen = "list_trx";
 		$data = array(
@@ -384,6 +416,46 @@ class Api extends MY_Controller
 			"status_recipient" => 1
 		);
 		$insert = $this->db->insert('message', $data);
+		$token = $this->db->get_where('user', array('id' => $recipient))->row()->token;
+		$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
+		$this->db->query("UPDATE message_user set created_at ='$date' where id_room='$id_chat'");
+		if ($insert) {
+			echo json_encode(array(
+				"status" => "200",
+				"message" => "Berhasil",
+			));
+		} else {
+			echo json_encode(array(
+				"status" => "500",
+				"message" => "Gagal",
+			));
+		}
+	}
+	public function sendMessageImage()
+	{
+		$sender = $this->input->post('sender');
+		$name = $this->db->get_where('user', array('id' => $sender))->row()->nama;
+		$message = $this->input->post('message');
+		$image = $this->input->post('image');
+		$recipient = $this->input->post('recipient');
+		$id_chat = $this->input->post('id_chat');
+		$date = date('Y-m-d H:i:s');
+		$title = "Message from " . $name;
+		$body = $message;
+		$screen = "list_trx";
+		$data = array(
+			"id_chat" => $id_chat,
+			"message" => $message,
+			"sender" => $sender,
+			"recipient" => $recipient,
+			"created_at" => $date,
+			"msg_type" => 1,
+			"status" => 0,
+			"status_recipient" => 1
+		);
+		$insert = $this->db->insert('message', $data);
+		$realImage = base64_decode($image);
+		$files = file_put_contents("./image/" . $message, $realImage);
 		$token = $this->db->get_where('user', array('id' => $recipient))->row()->token;
 		$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
 		$this->db->query("UPDATE message_user set created_at ='$date' where id_room='$id_chat'");
@@ -429,6 +501,7 @@ class Api extends MY_Controller
 				array_push($response, array(
 					"message" => $rows->message,
 					"sender" => $rows->sender,
+					"type" => $rows->msg_type,
 					"created" => formatTanggal(substr($rows->created_at, 0, 10)),
 					"time" => substr($rows->created_at, 11, 8),
 				));
