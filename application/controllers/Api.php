@@ -20,12 +20,12 @@ class Api extends MY_Controller
 
 			$data = array(
 				"latitude" => $lat,
-				"longitude" => $long,
+				"logitude" => $long,
 				"afc" => $afc,
 			);
 			if ($lat != "" and $long != "") {
 				$this->db->where('id', $id);
-				$this->db->update('petugas', $data);
+				$this->db->update('user', $data);
 			}
 			echo json_encode(array(
 				"status" => 200,
@@ -34,7 +34,7 @@ class Api extends MY_Controller
 		} else {
 			echo json_encode(array(
 				"status" => "error",
-				"message" => "Gagal Mendapatkan lokasi",
+				"message" => $_POST,
 			));
 		}
 	}
@@ -439,26 +439,23 @@ class Api extends MY_Controller
 		$image = $this->input->post('image');
 		$recipient = $this->input->post('recipient');
 		$id_chat = $this->input->post('id_chat');
-		$date = date('Y-m-d H:i:s');
 		$title = "Message from " . $name;
 		$body = $message;
 		$screen = "list_trx";
 		$data = array(
-			"id_chat" => $id_chat,
-			"message" => $message,
-			"sender" => $sender,
-			"recipient" => $recipient,
-			"created_at" => $date,
-			"msg_type" => 1,
-			"status" => 0,
-			"status_recipient" => 1
+			"kode_pesan" => $id_chat,
+			"isi_pesan" => $message,
+			"pengirim" => $sender,
+			"penerima" => $recipient,
+			"jenis_pesan" => 1,
+			"hapus_by_pengirim" => 0,
+			"hapus_by_penerima" => 0
 		);
-		$insert = $this->db->insert('message', $data);
+		$insert = $this->db->insert('detail_pesan', $data);
 		$realImage = base64_decode($image);
 		$files = file_put_contents("./image/" . $message, $realImage);
 		$token = $this->db->get_where('user', array('id' => $recipient))->row()->token;
 		$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token, $title, $body, $screen);
-		$this->db->query("UPDATE message_user set created_at ='$date' where id_room='$id_chat'");
 		if ($insert) {
 			echo json_encode(array(
 				"status" => "200",
@@ -1259,6 +1256,228 @@ class Api extends MY_Controller
 				"status" => 404,
 				"message" => "Data tidak ditemukan"
 			));
+		}
+	}
+
+	public function list_pesan()
+	{
+		$idKu         = $this->input->post("id_user");
+		$starts       = $this->input->post("start");
+		$length       = $this->input->post("length");
+		$LIMIT        = "LIMIT $starts, $length ";
+		$search       = $this->input->post('searching');
+
+		$where = "WHERE 1=1 AND pengirim ='$idKu' or penerima ='$idKu' ";
+		if ($search == "") {
+			$where .= "";
+		} else {
+			$where .= " AND (penerima like '%$search%') ";
+		}
+
+		$where .= " ORDER BY created_at DESC";
+		if (isset($LIMIT)) {
+			if ($LIMIT != '') {
+				$where .= ' ';
+			}
+		}
+		$query = $this->db->query("SELECT * FROM pesan $where");
+		if ($query->num_rows() > 0) {
+			$response = array();
+			foreach ($query->result() as $rows) {
+				$last = $this->db->query("SELECT * FROM detail_pesan where kode_pesan ='$rows->kode_pesan' order by id desc limit 1");
+				$type = "";
+				$message = "";
+				if ($last->num_rows() > 0) {
+					$message = $last->row()->isi_pesan;
+					$type = $last->row()->jenis_pesan;
+				}
+				array_push($response, array(
+					"id_pesan" => $rows->kode_pesan,
+					"id_pengirim" => $rows->pengirim,
+					"id_penerima" => $rows->penerima,
+					"tanggal_pesan" => formatTanggal(substr($rows->created_at, 0, 10)),
+					"jam_pesan" => substr($rows->created_at, 11, 8),
+					"hapus_by_pengirim" => $rows->hapus_by_pengirim,
+					"hapus_by_penerima" => $rows->hapus_by_penerima,
+					"nama_penerima" => $this->db->get_where('user', ['id' => $rows->penerima])->row()->nama,
+					"nama_pengirim" => $this->db->get_where('user', ['id' => $rows->pengirim])->row()->nama,
+					"foto_penerima" => $this->db->get_where('user', ['id' => $rows->penerima])->row()->picture,
+					"foto_pengirim" => $this->db->get_where('user', ['id' => $rows->pengirim])->row()->picture,
+					"pesan_terakhir" => $message,
+					"tipe_pesan" => $type,
+				));
+			}
+			echo json_encode(array(
+				"status" => 200,
+				"data" => $response
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"data" => "Data tidak ditemukan"
+			));
+		}
+	}
+
+	public function get_detail_room()
+	{
+		$id = $this->input->post("id");
+		$user_id = $this->input->post("user_id");
+
+		$query = $this->db->query("SELECT * FROM pesan where kode_pesan='$id'");
+		$final_user = $query->row()->pengirim == $user_id ? $query->row()->penerima : $query->row()->pengirim;
+		if ($query->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => 200,
+				"nama" => $this->db->get_where("user", array("id" => $final_user))->row()->nama,
+				"id_penerima" => $final_user,
+				"token_fcm" => $this->db->get_where("user", array("id" => $final_user))->row()->token,
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"pesan" => "Tidak ada data ditemukan"
+			));
+		}
+	}
+
+	public function get_detail_pesan()
+	{
+		$id = $this->input->post("id");
+		$query = $this->db->query("SELECT * FROM detail_pesan where kode_pesan='$id'");
+		if ($query->num_rows() > 0) {
+			$result = array();
+			foreach ($query->result() as $rows) {
+				array_push($result, array(
+					"jenis_pesan" => $rows->jenis_pesan,
+					"isi_pesan" => $rows->isi_pesan,
+					"pengirim" => $rows->pengirim,
+					"penerima" => $rows->penerima,
+				));
+			}
+			echo json_encode(array(
+				"status" => 200,
+				"data" => $result
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"pesan" => "Data tidak ditemukan"
+			));
+		}
+	}
+
+	public function kirim_pesan()
+	{
+		$kode_pesan = $this->input->post("kode_pesan");
+		$token_fcm = $this->input->post("token_fcm");
+		$pengirim = $this->input->post("pengirim");
+		$penerima = $this->input->post("penerima");
+		$jenis_pesan = $this->input->post("jenis_pesan");
+		$isi_pesan = $this->input->post("isi_pesan");
+		$hapus_by_pengirim = $this->input->post("hapus_by_pengirim");
+		$hapus_by_penerima = $this->input->post("hapus_by_penerima");
+
+		$data = array(
+			"kode_pesan" => $kode_pesan,
+			"pengirim" => $pengirim,
+			"penerima" => $penerima,
+			"jenis_pesan" => $jenis_pesan,
+			"isi_pesan" => $isi_pesan,
+			"hapus_by_pengirim" => $hapus_by_pengirim,
+			"hapus_by_penerima" => $hapus_by_penerima,
+		);
+
+
+		$insert = $this->db->insert("detail_pesan", $data);
+		$title = "Broadcast Message";
+		$body = $isi_pesan;
+		$screen = "list_trx";
+
+		if ($insert) {
+			$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $token_fcm, $title, $body, $screen);
+			echo json_encode(array(
+				"status" => 200,
+				"data" => $data
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"message" => "Data tidak ditemukan"
+			));
+		}
+	}
+
+	public function buat_pesan()
+	{
+		$pengirim = $this->input->post('pengirim');
+		$penerima = $this->input->post('penerima');
+		$kode = $this->acak(10);
+		$response = array();
+
+		$title = "Broadcast Message";
+		$body = "Hai,";
+		$screen = "list_trx";
+
+		$cek = $this->db->query("SELECT * FROM pesan where pengirim='$pengirim' and penerima='$penerima'");
+		if ($cek->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => "200",
+				"id_pesan" => $cek->row()->kode_pesan,
+				"penerima" => $cek->row()->penerima,
+			));
+		} else {
+			$insert_message_user = array(
+				"kode_pesan" => $kode,
+				"pengirim" => $pengirim,
+				"penerima" => $penerima,
+				"created_at" => date('Y-m-d H:i:s')
+			);
+			$message = array(
+				"kode_pesan" => $kode,
+				"isi_pesan" => "Hai,",
+				"pengirim" => $pengirim,
+				"penerima" => $penerima,
+				"jenis_pesan" => 0,
+				"hapus_by_pengirim" => 0,
+				"hapus_by_penerima" => 0,
+			);
+			$prosesInsert = $this->db->insert('pesan', $insert_message_user);
+			$insertMessage = $this->db->insert('detail_pesan', $message);
+			$fcm = $this->db->query("SELECT * FROM user where id='$penerima'")->row();
+			$this->SendNotif_model->send_notif(get_setting('server_fcm_app'), $fcm->token, $title, $body, $screen);
+			echo json_encode(array(
+				"status" => "200",
+				"id_pesan" => $kode,
+				"penerima" => $penerima,
+				"pengirim" => $pengirim
+			));
+		}
+	}
+
+	public function delete_pesan()
+	{
+		$id = $this->input->post("id");
+		$user_id = $this->input->post("user_id");
+
+		$query = $this->db->query("SELECT * FROM pesan where kode_pesan='$id'");
+		if ($query->num_rows() > 0) {
+			if ($query->row()->pengirim == $user_id) {
+				$this->db->where("kode_pesan", $id);
+				$this->db->update("pesan", array("hapus_by_pengirim" => $user_id));
+				echo json_encode(array(
+					"status" => 200,
+					"pesan" => "Berhasil menghapus pesan",
+				));
+			} elseif ($query->row()->penerima == $user_id) {
+
+				$this->db->where("kode_pesan", $id);
+				$this->db->update("pesan", array("hapus_by_penerima" => $user_id));
+				echo json_encode(array(
+					"status" => 200,
+					"pesan" => "Berhasil menghapus pesan",
+				));
+			}
 		}
 	}
 }
