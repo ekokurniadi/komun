@@ -1421,10 +1421,15 @@ class Api extends MY_Controller
 
 		$cek = $this->db->query("SELECT * FROM pesan where pengirim='$pengirim' and penerima='$penerima'");
 		if ($cek->num_rows() > 0) {
+
+			$ID = $cek->row()->kode_pesan;
+			$this->db->where("kode_pesan", $ID);
+			$this->db->update("pesan", array("hapus_by_pengirim" => 0, "hapus_by_penerima" => 0));
 			echo json_encode(array(
 				"status" => "200",
 				"id_pesan" => $cek->row()->kode_pesan,
 				"penerima" => $cek->row()->penerima,
+				"pengirim" => $pengirim
 			));
 		} else {
 			$insert_message_user = array(
@@ -1478,6 +1483,40 @@ class Api extends MY_Controller
 					"pesan" => "Berhasil menghapus pesan",
 				));
 			}
+		}
+	}
+
+	public function request_location()
+	{
+		$id = $this->input->post("penerima");
+		$query = $this->db->query("SELECT * FROM user where id='$id' limit 1");
+		if ($query->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => 200,
+				"alamat" => $query->row()->afc,
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"pesan" => "Terjadi kesalahan"
+			));
+		}
+	}
+
+	public function get_phone_number()
+	{
+		$ID = $this->input->post("penerima");
+		$query = $this->db->query("SELECT * FROM user where id='$ID'");
+		if ($query->num_rows() > 0) {
+			echo json_encode(array(
+				"status" => 200,
+				"phone_number" => $query->row()->username,
+			));
+		} else {
+			echo json_encode(array(
+				"status" => 404,
+				"phone_number" => 0,
+			));
 		}
 	}
 }
